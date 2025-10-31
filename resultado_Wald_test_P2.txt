@@ -1,0 +1,16 @@
+============================================================
+RESULTADO DEL TEST DE WALD (RUPTURA ESTRUCTURAL)
+Panel 2: Reasignación (AFP × Tipo de Fondo)
+============================================================
+
+Estadístico F: 0.1893
+p-valor: 0.9958
+Grados de libertad: (4, None)
+
+Recomendación: MODELO_RESTRINGIDO
+
+Linear Equality Hypothesis Test
+H0: Linear equality constraint is valid
+Statistic: 0.1893
+P-value: 0.9958
+Distributed: chi2(4)
