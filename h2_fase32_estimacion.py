@@ -54,18 +54,48 @@ def convertir_a_json_serializable(obj):
     """Convierte objetos numpy/pandas a tipos nativos de Python"""
     if isinstance(obj, dict):
         return {k: convertir_a_json_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return [convertir_a_json_serializable(item) for item in obj]
-    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+    if isinstance(obj, tuple):
+        return [convertir_a_json_serializable(item) for item in obj]
+    if isinstance(obj, (np.integer, np.int64, np.int32)):
         return int(obj)
-    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+    if isinstance(obj, (np.floating, np.float64, np.float32)):
         return float(obj)
-    elif isinstance(obj, (np.bool_)):
+    if isinstance(obj, (np.bool_,)):
         return bool(obj)
-    elif isinstance(obj, np.ndarray):
+    if isinstance(obj, np.ndarray):
         return obj.tolist()
-    else:
-        return obj
+    if hasattr(obj, "item") and isinstance(obj, np.generic):
+        return obj.item()
+    return obj
+
+
+def detectar_no_serializables(obj, path="root"):
+    """Retorna rutas y tipos de valores que no son serializables en JSON"""
+    problemas = []
+
+    if isinstance(obj, dict):
+        for clave, valor in obj.items():
+            problemas.extend(detectar_no_serializables(valor, f"{path}.{clave}"))
+        return problemas
+
+    if isinstance(obj, list):
+        for idx, valor in enumerate(obj):
+            problemas.extend(detectar_no_serializables(valor, f"{path}[{idx}]"))
+        return problemas
+
+    if isinstance(obj, tuple):
+        for idx, valor in enumerate(obj):
+            problemas.extend(detectar_no_serializables(valor, f"{path}[{idx}]"))
+        return problemas
+
+    try:
+        json.dumps(obj)
+    except (TypeError, OverflowError):
+        problemas.append((path, type(obj).__name__))
+
+    return problemas
 class EstimacionH2:
     """
     Estima modelo de heterogeneidad por Fondo 1
@@ -398,16 +428,30 @@ class EstimacionH2:
             f.write(self.modelo.summary.as_text())
         print(f"✓ {archivo_summary}")
         
-        # 2. Guardar con pickle (temporal - para debug)
+        # 2. Guardar resultados estructurados en JSON
+        archivo_json = OUTPUT_DIR / 'h2_resultados.json'
+        resultados_serializables = convertir_a_json_serializable(self.resultados)
+
+        problemas_serializacion = detectar_no_serializables(resultados_serializables)
+        if problemas_serializacion:
+            print("⚠️  Valores no serializables detectados (conversión a cadena):")
+            for ruta, tipo in problemas_serializacion:
+                print(f"   • {ruta}: {tipo}")
+
+        with open(archivo_json, 'w', encoding='utf-8') as f:
+            json.dump(resultados_serializables, f, ensure_ascii=False, indent=4)
+        print(f"✓ {archivo_json} (formato JSON)")
+
+        # 3. Guardar con pickle (para depuración)
         import pickle
         archivo_pickle = OUTPUT_DIR / 'h2_resultados.pkl'
         with open(archivo_pickle, 'wb') as f:
             pickle.dump(self.resultados, f)
         print(f"✓ {archivo_pickle} (formato pickle)")
-        
-        # 3. Tabla de coeficientes (Excel)
+
+        # 4. Tabla de coeficientes (Excel)
         archivo_excel = OUTPUT_DIR / 'h2_coeficientes.xlsx'
-        
+
         df_coefs = pd.DataFrame({
             'Variable': list(self.modelo.params.index),
             'Coeficiente': [float(x) for x in self.modelo.params.values],
@@ -422,7 +466,6 @@ class EstimacionH2:
         print(f"✓ {archivo_excel}")
         
         print(f"\n✅ Resultados guardados en: {OUTPUT_DIR}/")
-        print(f"⚠️  NOTA: Resultados guardados en .pkl (no JSON por ahora)")
 
 # =============================================================================
 # FUNCIÓN PRINCIPAL
